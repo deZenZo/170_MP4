@@ -18,6 +18,7 @@ import random, util
 
 from game import Agent
 
+
 class ReflexAgent(Agent):
     """
       A reflex agent chooses an action at each choice point by examining
@@ -27,7 +28,6 @@ class ReflexAgent(Agent):
       it in any way you see fit, so long as you don't touch our method
       headers.
     """
-
 
     def getAction(self, gameState):
         """
@@ -42,10 +42,11 @@ class ReflexAgent(Agent):
         legalMoves = gameState.getLegalActions()
 
         # Choose one of the best actions
+
         scores = [self.evaluationFunction(gameState, action) for action in legalMoves]
         bestScore = max(scores)
         bestIndices = [index for index in range(len(scores)) if scores[index] == bestScore]
-        chosenIndex = random.choice(bestIndices) # Pick randomly among the best
+        chosenIndex = random.choice(bestIndices)  # Pick randomly among the best
 
         "Add more of your code here if you want to"
 
@@ -74,19 +75,32 @@ class ReflexAgent(Agent):
         newScaredTimes = [ghostState.scaredTimer for ghostState in newGhostStates]
 
         "*** YOUR CODE HERE ***"
-        score = successorGameState.getScore()
+        # print (newScaredTimes)
+        val = successorGameState.getScore()
 
-        # HINTS:
-        # Given currentGameState and successorGameState, determine if the next state is good / bad
-        # Compute a numerical score for next state that will reflect this
-        # Base score = successorGameState.getScore() - Line 77
-        # Can increase / decrease this score depending on:
-        #   new pacman position, ghost position, food position, 
-        #   distances to ghosts, distances to food
-        # You can choose which features to use in your evaluation function
-        # You can also put more weight to some features
+        # The ghost's threat value drops significantly if they're scared, but they remain a threat nonetheless.
+        # Thus, when the ghosts are scared, food should be gathered more.
+        scared = min(newScaredTimes) < 1
+        ghost_weight = (10 * scared) + 5
+        food_weight = 10
 
-        return score
+        distanceGhost = [manhattanDistance(newPos, ghost.getPosition()) for ghost in newGhostStates]
+        try:
+            if min(
+                    distanceGhost) > 0:  # We're only concerned with the nearest ghost as it is the immediate danger to pacman.
+                val -= ghost_weight / min(distanceGhost)
+        except ValueError:
+            print("VALUE ERROR")
+
+        distanceFood = [manhattanDistance(newPos, food) for food in newFood.asList()]
+        try:
+            if min(distanceFood) > 0:  # As long as food remains, pacman must seek them while avoiding the ghosts.
+                # if len(distanceFood):
+                val += food_weight / min(distanceFood)
+        except ValueError:
+            print("VALUE ERROR")
+
+        return val
 
 def scoreEvaluationFunction(currentGameState):
     """
@@ -143,45 +157,84 @@ class MinimaxAgent(MultiAgentSearchAgent):
         "*** YOUR CODE HERE ***"
         currentDepth = 0
         currentAgentIndex = self.index # agent's index
-        action,score = self.value(gameState, currentAgentIndex, currentDepth)
-        return action 
+        action, score = self.value(gameState, currentAgentIndex, currentDepth)
+        # print action
+        return action
 
     # Note: always returns (action,score) pair
     def value(self, gameState, currentAgentIndex, currentDepth):
-      pass
-      # Check when to update depth
-      # check if currentDepth == self.depth
-      #   if it is, stop recursion and return score of gameState based on self.evaluationFunction
-      # check if gameState.isWin() or gameState.isLose()
-      #   if it is, stop recursion and return score of gameState based on self.evaluationFunction
+
+      if currentAgentIndex >= gameState.getNumAgents():# when current Agent index is more than num of agents is becomes pacman's index and the depth increases
+          currentAgentIndex = 0
+          currentDepth += 1
+
+      if  currentDepth == self.depth or gameState.isWin() or gameState.isLose(): #when we are starting to hit terminal states like reaching max depth.
+          return self.evaluationFunction(gameState)
+
+      elif currentAgentIndex == 0:          #get max value when index of agent is pacman
+          return self.max_value(gameState, currentAgentIndex, currentDepth)
+
+      else:                                 #get min value when index of agent is ghosts
+          return self.min_value(gameState, currentAgentIndex, currentDepth)
       # check whether currentAgentIndex is our pacman agent or ghost agent
       # if our agent: return max_value(....)
       # otherwise: return min_value(....)
 
-    # Note: always returns (action,score) pair
     def max_value(self, gameState, currentAgentIndex, currentDepth):
-      pass
-      # current_value = -inf
-      # loop over each action available to current agent:
-      # (hint: use gameState.getLegalActions(...) for this)
-      #     use gameState.generateSuccessor to get nextGameState from action
-      #     compute value of nextGameState by calling self.value
-      #     compare value of nextGameState and current_value
-      #     keep whichever value is bigger, and take note of the action too
-      # return (action,current_value)
 
-    # Note: always returns (action,score) pair
-    def min_value(self, gameState, currentAgentIndex, currentDepth):
-      pass
-      # current_value = inf
+        legalActions = gameState.getLegalActions(currentAgentIndex)
+        current_value = float('-inf')
+        current_action = "None"
+        ret_pair = [current_action, current_value] #pair to be returned
+
+        for action in legalActions:#loops through all legal actions available to current agent
+            val = self.value(gameState.generateSuccessor(currentAgentIndex, action), currentAgentIndex + 1, currentDepth) #gets the value of the succesor of the other agent
+
+            if type(val) is list: # since i have to return pairs and this is in recursion it is needed to help get the value of the action
+                check_val = val[1]
+            else:
+                check_val = val
+
+            if check_val > current_value: #if the checking value is larger then that will be the updated current value and the value of the action's score
+                ret_pair = [action, check_val]
+                current_value = check_val
+
+        return ret_pair     #retruns the list pair
+
       # loop over each action available to current agent:
       # (hint: use gameState.getLegalActions(...) for this)
       #     use gameState.generateSuccessor to get nextGameState from action
       #     compute value of nextGameState by calling self.value
       #     compare value of nextGameState and current_value
       #     keep whichever value is smaller, and take note of the action too
-      # return (action,current_value)
 
+    def min_value(self, gameState, currentAgentIndex, currentDepth):
+
+        current_value = float('inf')
+        legalActions = gameState.getLegalActions(currentAgentIndex)
+        current_action = "None"
+        ret_pair = [current_action, current_value]#pair to be returned
+
+        for action in legalActions: #loops through all legal actions available to current agent
+            val = self.value(gameState.generateSuccessor(currentAgentIndex, action), currentAgentIndex + 1, currentDepth) #gets the value of the succesor of the other agent
+
+            if type(val) is list: # since i have to return pairs and this is in recursion it is needed to help get the value of the action
+                check_val = val[1]
+            else:
+                check_val = val
+
+            if check_val < current_value:  #if the checking value is smaller then that will be the updated current value and the value of the action's score
+                ret_pair = [action, check_val]
+                current_value = check_val
+
+        return ret_pair # returns the list pair
+
+        # loop over each action available to current agent:
+        # (hint: use gameState.getLegalActions(...) for this)
+        #      use gameState.generateSuccessor to get nextGameState from action
+        #     compute value of nextGameState by calling self.value
+        #     compare value of nextGameState and current_value
+        #     keep whichever value is smaller, and take note of the action too
 
 
 class AlphaBetaAgent(MultiAgentSearchAgent):
